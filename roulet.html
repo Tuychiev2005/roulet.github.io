@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Рулетка</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #rouletteContainer {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        #roulette {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1);
+            background-image: conic-gradient(
+                #ff9900 0deg, #ffe599 60deg,
+                #ff9900 60deg, #ffe599 120deg,
+                #ff9900 120deg, #ffe599 180deg,
+                #ff9900 180deg, #ffe599 240deg,
+                #ff9900 240deg, #ffe599 300deg,
+                #ff9900 300deg, #ffe599 360deg
+            );
+        }
+        #marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 20px solid red;
+            transform: translate(-50%, -50%) rotate(90deg);
+            z-index: 1;
+        }
+        #spinButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+        #spinButton:hover {
+            background-color: #367C39;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Крутите рулетку!</h1>
+    <div id="rouletteContainer">
+        <div id="roulette"></div>
+        <div id="marker"></div>
+    </div>
+    <button id="spinButton">Крутить!</button>
+    <div id="result"></div>
+
+    <script>
+        const spinButton = document.getElementById('spinButton');
+        const roulette = document.getElementById('roulette');
+        const resultDiv = document.getElementById('result');
+        let canSpin = true;
+        let lastSpinTime = localStorage.getItem('lastSpinTime');
+
+        // Проверка, прошло ли 24 часа с последнего спина
+        function canSpinNow() {
+            if (!lastSpinTime) {
+                return true; // Первый спин
+            }
+
+            const now = new Date().getTime();
+            const lastTime = parseInt(lastSpinTime, 10);
+            const timeDifference = now - lastTime;
+            const twentyFourHours = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
+
+            return timeDifference >= twentyFourHours;
+        }
+
+        // Блокировка кнопки, если еще не прошло 24 часа
+        if (!canSpinNow()) {
+            canSpin = false;
+            spinButton.disabled = true;
+            const timeLeft = 24 * 60 * 60 * 1000 - (new Date().getTime() - parseInt(lastSpinTime, 10));
+            const hoursLeft = Math.ceil(timeLeft / (60 * 60 * 1000));
+            resultDiv.textContent = `Вы сможете крутить рулетку через ${hoursLeft} часов.`;
+        }
+
+        spinButton.addEventListener('click', () => {
+            if (!canSpin) {
+                return; // Нельзя крутить
+            }
+
+            canSpin = false;
+            spinButton.disabled = true;
+
+            // Генерируем случайный угол для остановки рулетки
+            const degree = Math.floor(Math.random() * 360);
+
+            // Запускаем анимацию вращения
+            roulette.style.transition = 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)';
+            roulette.style.transform = `rotate(${360 * 5 + degree}deg)`;
+
+            // После окончания вращения
+            setTimeout(() => {
+                roulette.style.transition = 'none';
+                roulette.style.transform = `rotate(${degree}deg)`;
+
+                // Определяем сектор, в котором остановилась рулетка
+                let sector = Math.floor(degree / 60); // 6 секторов
+                let prize;
+
+                switch (sector) {
+                    case 0: prize = 10; break;
+                    case 1: prize = 20; break;
+                    case 2: prize = 5; break;
+                    case 3: prize = 15; break;
+                    case 4: prize = 25; break;
+                    case 5: prize = 1; break;
+                }
+                resultDiv.textContent = `Вы выиграли ${prize} ⭐!`;
+                // Сохраняем время спина в localStorage
+                localStorage.setItem('lastSpinTime', new Date().getTime().toString());
+                lastSpinTime = localStorage.getItem('lastSpinTime');
+
+                // Отправляем данные в бота
+                sendDataToTelegram(prize);
+
+            }, 5000); // Время вращения рулетки
+
+            // Снова разрешаем крутить рулетку через 24 часа
+            setTimeout(() => {
+                canSpin = true;
+                spinButton.disabled = false;
+                resultDiv.textContent = 'Рулетка снова доступна!';
+            }, 24 * 60 * 60 * 1000); // 24 часа
+        });
+
+        // Функция для отправки данных в Telegram бота
+        function sendDataToTelegram(prize) {
+            const data = {
+                prize: prize
+            };
+
+            // Получаем user_id из URL WebApp
+            const urlParams = new URLSearchParams(window.location.search);
+            const userId = urlParams.get('tgWebAppUserId');
+
+            if (!userId) {
+                console.error('Не удалось получить user_id из URL.');
+                return;
+            }
+
+             // Замените YOUR_BOT_TOKEN и YOUR_CHAT_ID на свои значения
+            const botToken = '8125011103:AAEmVYWkWH8vYhWjtrLwNuqN2gy-H0MXezk';
+            const chatId = userId; // Используем user_id как chat_id в данном случае
+            const apiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            const text = `Пользователь ${userId} выиграл в рулетку ${prize}⭐!`;
+
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                     chat_id: chatId,
+                     text: text
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    console.log('Данные успешно отправлены в Telegram!');
+                } else {
+                    console.error('Ошибка при отправке данных в Telegram:', data);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка сети:', error);
+            });
+        }
+    </script>
+</body>
+</html>
+      
